@@ -30,4 +30,26 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+    // Build a webassembly module
+    const target_wasm32 = b.resolveTargetQuery(.{
+        .cpu_arch = .wasm32,
+        .os_tag = .freestanding,
+    });
+
+    const wasm = b.addExecutable(.{
+        .name = "minizign",
+        .root_source_file = .{ .path = "src/wasm.zig" },
+        .target = target_wasm32,
+        .optimize = optimize,
+    });
+
+    wasm.entry = .disabled;
+    wasm.root_module.export_symbol_names = &.{
+        "publicKeyFromBase64",
+        "signatureDecode",
+        "publicKeyVerifySignature",
+    };
+
+    b.installArtifact(wasm);
 }
