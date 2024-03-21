@@ -47,10 +47,13 @@ pub fn build(b: *std.Build) void {
     wasm.entry = .disabled;
     wasm.export_memory = true;
     wasm.root_module.export_symbol_names = &.{
-        "allocateBuffer",
-        "publicKeyFromBase64",
+        "allocate",
+        "free",
         "signatureDecode",
-        "publicKeyVerifySignature",
+        "signatureDeinit",
+        "publicKeyFromBase64",
+        "publicKeyDeinit",
+        "publicKeyVerify",
     };
 
     const installWasm = b.addInstallArtifact(wasm, .{});
