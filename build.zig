@@ -45,11 +45,23 @@ pub fn build(b: *std.Build) void {
     });
 
     wasm.entry = .disabled;
+    wasm.export_memory = true;
     wasm.root_module.export_symbol_names = &.{
+        "allocateBuffer",
         "publicKeyFromBase64",
         "signatureDecode",
         "publicKeyVerifySignature",
     };
 
-    b.installArtifact(wasm);
+    const installWasm = b.addInstallArtifact(wasm, .{});
+    b.getInstallStep().dependOn(&installWasm.step);
+
+    const update_module = b.option(bool, "update-module", "Update the commited webassembly module") orelse false;
+
+    if (update_module) {
+        const write_files = b.addWriteFiles();
+        write_files.step.dependOn(&wasm.step);
+        write_files.addCopyFileToSource(installWasm.emitted_bin.?, "minizign.wasm");
+        b.getInstallStep().dependOn(&write_files.step);
+    }
 }

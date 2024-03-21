@@ -3,28 +3,34 @@ const lib = @import("lib.zig");
 const PublicKey = lib.PublicKey;
 const Signature = lib.Signature;
 
+export fn allocateBuffer(len: u32) ?[*]u8 {
+    const alloc = std.heap.wasm_allocator;
+    const buf = alloc.alloc(u8, len) catch return null;
+    return buf.ptr;
+}
+
 /// Takes a base64 encoded string and creates a PublicKey object in the provided buffer.
 /// On success, returns the number of bytes used. On failure, returns 0.
-export fn publicKeyFromBase64(str: [*]const u8, len: u32, buffer: [*]u8, buffer_length: u32) u32 {
-    if (buffer_length < @sizeOf(PublicKey)) return 0;
-    const pk: *PublicKey = @alignCast(@ptrCast(buffer));
+export fn publicKeyFromBase64(str: [*]const u8, len: u32) ?*PublicKey {
+    const alloc = std.heap.wasm_allocator;
+    const pk: *PublicKey = alloc.create(PublicKey) catch return null;
+    errdefer alloc.destroy(pk);
 
-    pk.* = PublicKey.fromBase64(str[0..len]) catch return 0;
+    pk.* = PublicKey.fromBase64(str[0..len]) catch return null;
 
-    return @sizeOf(PublicKey);
+    return pk;
 }
 
 /// Takes minisign signature and creates a Signature object in memory.
 /// On success, returns the number of bytes used. On failure, returns 0.
-export fn signatureDecode(str: [*]const u8, len: u32, buffer: [*]u8, buffer_length: u32) u32 {
-    if (buffer_length < @sizeOf(Signature)) return 0;
-    const sig: *Signature = @alignCast(@ptrCast(buffer));
+export fn signatureDecode(str: [*]const u8, len: u32) ?*Signature {
+    const alloc = std.heap.wasm_allocator;
+    const sig: *Signature = alloc.create(Signature) catch return null;
+    errdefer alloc.destroy(sig);
 
-    var fba = std.heap.FixedBufferAllocator.init(buffer[@sizeOf(Signature)..buffer_length]);
+    sig.* = Signature.decode(alloc, str[0..len]) catch return null;
 
-    sig.* = Signature.decode(fba.allocator(), str[0..len]) catch return 0;
-
-    return @sizeOf(Signature) + fba.end_index;
+    return sig;
 }
 
 /// Takes a pointer to a PublicKey, a pointer to a Signature
@@ -33,12 +39,10 @@ export fn publicKeyVerifySignature(
     sig: *const Signature,
     file: [*]const u8,
     file_len: u32,
-    buffer: [*]u8,
-    buffer_length: u32,
-) u32 {
-    var fba = std.heap.FixedBufferAllocator.init(buffer[0..buffer_length]);
+) bool {
+    const alloc = std.heap.wasm_allocator;
 
-    pk.verify(fba.allocator(), file[0..file_len], sig.*, null) catch return 0;
+    pk.verify(alloc, file[0..file_len], sig.*, null) catch return false;
 
-    return fba.end_index;
+    return true;
 }

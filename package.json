@@ -1,0 +1,11 @@
+{
+  "name": "minizign",
+  "version": "1.0.0",
+  "description": "Minisign API for JS using Zig minisign WebAssembly module",
+  "main": "minizign.mjs",
+  "scripts": {
+    "test": "node test.mjs"
+  },
+  "author": "",
+  "license": "ISC"
+}
