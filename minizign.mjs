@@ -35,6 +35,12 @@ function checkResult(result) {
     case -11:
       throw new Error("Weak Public Key");
       break;
+    case -12:
+      throw new Error("Cannot Prehash");
+      break;
+    case -13:
+      throw new Error("Must Prehash");
+      break;
     default:
       // Do nothing
       break;
@@ -135,6 +141,13 @@ export class Signature {
     this.index = index;
     this.slice = slice;
   }
+  canPrehash() {
+    const instance = this.minizign.instance;
+    const result = instance.exports.signatureCanPrehash(this.index);
+    checkResult(result);
+
+    return result === 1;
+  }
   deinit() {
     const instance = this.minizign.instance;
     instance.exports.signatureDeinit(this.index);
@@ -147,8 +160,8 @@ export class PublicKey {
     this.minizign = minizign;
     this.index = index;
     this.string = string;
-  }
-  verify(signature, file) {   
+  } 
+  verifyLegacy(signature, file) {   
     if (!(this instanceof PublicKey)) {
       throw new Error('this must be an instance of PublicKey');
     }
@@ -158,13 +171,48 @@ export class PublicKey {
 
     const instance = this.minizign.instance;
 
-    const { publicKeyVerify } = instance.exports
+    const { publicKeyVerifyLegacy } = instance.exports
 
     const dupedFile = this.minizign.dupe(file);
-    this.file = dupedFile;
-    
-    const resultVerify = publicKeyVerify(this.index, signature.index, dupedFile.index, dupedFile.length);
-    checkResult(resultVerify); 
+
+    const resultVerify = publicKeyVerifyLegacy(this.index, signature.index, dupedFile.index, dupedFile.length);
+    instance.exports.free(dupedFile.index, dupedFile.capacity);
+    checkResult(resultVerify);  
+
+    if (resultVerify !== 1) {
+      throw new Error('Unexpected result from verifying');
+    }
+  }
+  verifier(signature) {
+    const instance = this.minizign.instance; 
+    const { publicKeyGetVerifier } = instance.exports
+
+    if (!(signature instanceof Signature)) {
+      throw new Error('signature parameter must be an instance of Signature');
+    }
+
+    const resultGetVerifier = publicKeyGetVerifier(this.index, signature.index);
+    checkResult(resultGetVerifier);
+
+    return new Verifier(this.minizign, resultGetVerifier);
+  }
+  verifyLegacy(signature, file) {   
+    if (!(this instanceof PublicKey)) {
+      throw new Error('this must be an instance of PublicKey');
+    }
+    if (!(signature instanceof Signature)) {
+      throw new Error('signature parameter must be an instance of Signature');
+    }
+
+    const instance = this.minizign.instance;
+
+    const { publicKeyVerifyLegacy } = instance.exports
+
+    const dupedFile = this.minizign.dupe(file);
+
+    const resultVerify = publicKeyVerifyLegacy(this.index, signature.index, dupedFile.index, dupedFile.length);
+    instance.exports.free(dupedFile.index, dupedFile.capacity);
+    checkResult(resultVerify);  
 
     if (resultVerify !== 1) {
       throw new Error('Unexpected result from verifying');
@@ -174,6 +222,46 @@ export class PublicKey {
     const instance = this.minizign.instance;
     instance.exports.publicKeyDeinit(this.index);
     instance.exports.free(this.string.index, this.string.capacity);
-    this.file && instance.exports.free(this.file.index, this.file.capacity);
   }
 } 
+
+export class Verifier {
+  constructor(minizign, index) {
+    this.minizign = minizign;
+    this.index = index;
+    this.bufferLength = 2 ** 10;
+    this.buffer = minizign.instance.exports.allocate(this.bufferLength);
+    checkResult(this.buffer);
+  }
+  update(slice) {
+    if (!(slice instanceof Buffer)) {
+      throw new Error('Invalid argument passed to Verifier.update');
+    }
+    const { memory, verifierUpdate } = this.minizign.instance.exports; 
+    const memoryView = new Uint8Array(memory.buffer);
+    const buffer = memoryView.subarray(this.buffer, this.buffer + this.bufferLength);
+    let i = 0;
+    while (i < slice.length) {
+      const end = Math.min(slice.length, i + this.bufferLength)
+      const length = end - i;
+      const sub = slice.subarray(i, end);
+      buffer.set(sub);
+      verifierUpdate(this.index, this.buffer, length);
+      i += length;
+    }
+  }
+  verify() { 
+    const { verifierVerify } = this.minizign.instance.exports; 
+    const resultVerify = verifierVerify(this.index);
+    checkResult(resultVerify); 
+
+    if (resultVerify !== 1) {
+      throw new Error('Unexpected result from verifying');
+    }
+  }
+  deinit() {
+    const instance = this.minizign.instance;
+    instance.exports.verifierDeinit(this.index);
+    instance.exports.free(this.buffer, 2 ** 10);
+  }
+}

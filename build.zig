@@ -50,10 +50,15 @@ pub fn build(b: *std.Build) void {
         "allocate",
         "free",
         "signatureDecode",
+        "signatureCanPrehash",
         "signatureDeinit",
         "publicKeyFromBase64",
         "publicKeyDeinit",
-        "publicKeyVerify",
+        "publicKeyVerifyLegacy",
+        "publicKeyGetVerifier",
+        "verifierUpdate",
+        "verifierVerify",
+        "verifierDeinit",
     };
 
     const installWasm = b.addInstallArtifact(wasm, .{});

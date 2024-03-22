@@ -27,6 +27,12 @@ pub const Signature = struct {
         self.arena.deinit();
     }
 
+    pub fn canPrehash(sig: Signature) !bool {
+        const signature_algorithm = sig.signature_algorithm;
+        const prehashed = if (signature_algorithm[0] == 0x45 and signature_algorithm[1] == 0x64) false else if (signature_algorithm[0] == 0x45 and signature_algorithm[1] == 0x44) true else return error.UnsupportedAlgorithm;
+        return prehashed;
+    }
+
     pub fn decode(child_allocator: mem.Allocator, lines_str: []const u8) !Signature {
         var arena = heap.ArenaAllocator.init(child_allocator);
         errdefer arena.deinit();
@@ -143,29 +149,58 @@ pub const PublicKey = struct {
         return PublicKey.decode(pks, pk_str);
     }
 
-    pub fn verify(self: PublicKey, allocator: std.mem.Allocator, file: []const u8, sig: Signature, prehash: ?bool) !void {
+    pub const Verifier = struct {
+        pk: *const PublicKey,
+        sig: *const Signature,
+        hash: Blake2b512,
+        pub fn update(verifier: *Verifier, bytes: []const u8) void {
+            verifier.hash.update(bytes);
+        }
+
+        pub fn verify(verifier: *Verifier, allocator: std.mem.Allocator) !void {
+            var digest: [64]u8 = undefined;
+
+            verifier.hash.final(&digest);
+
+            const ed25519_pk = try Ed25519.PublicKey.fromBytes(verifier.pk.key);
+            try Ed25519.Signature.fromBytes(verifier.sig.signature).verify(&digest, ed25519_pk);
+
+            var global = try allocator.alloc(u8, verifier.sig.signature.len + verifier.sig.trusted_comment.len);
+            defer allocator.free(global);
+            mem.copyForwards(u8, global[0..verifier.sig.signature.len], verifier.sig.signature[0..]);
+            mem.copyForwards(u8, global[verifier.sig.signature.len..], verifier.sig.trusted_comment);
+            try Ed25519.Signature.fromBytes(verifier.sig.global_signature).verify(global, ed25519_pk);
+        }
+    };
+
+    pub fn getVerifier(self: *const PublicKey, sig: *const Signature) !Verifier {
+        if (!(sig.canPrehash() catch false)) return error.CannotPrehash;
+
         const key_id_len = self.key_id.len;
         const null_key_id = mem.zeroes([key_id_len]u8);
         if (!mem.eql(u8, &null_key_id, &self.key_id) and !mem.eql(u8, &sig.key_id, &self.key_id)) {
             return error.KeyIdMismatch;
         }
-        const signature_algorithm = sig.signature_algorithm;
-        const prehashed = if (signature_algorithm[0] == 0x45 and signature_algorithm[1] == 0x64) false else if (signature_algorithm[0] == 0x45 and signature_algorithm[1] == 0x44) true else return error.UnsupportedAlgorithm;
-        if (prehash) |want_prehashed| {
-            if (prehashed != want_prehashed) {
-                return error.SignatureVerificationFailed;
-            }
+
+        return Verifier{
+            .pk = self,
+            .sig = sig,
+            .hash = Blake2b512.init(.{}),
+        };
+    }
+
+    pub fn verifyLegacy(self: PublicKey, allocator: std.mem.Allocator, file: []const u8, sig: Signature) !void {
+        if (sig.canPrehash() catch false) return error.MustPrehash;
+
+        const key_id_len = self.key_id.len;
+        const null_key_id = mem.zeroes([key_id_len]u8);
+        if (!mem.eql(u8, &null_key_id, &self.key_id) and !mem.eql(u8, &sig.key_id, &self.key_id)) {
+            return error.KeyIdMismatch;
         }
-        var digest: [64]u8 = undefined;
         const ed25519_pk = try Ed25519.PublicKey.fromBytes(self.key);
-        if (prehashed) {
-            var h = Blake2b512.init(.{});
-            h.update(file);
-            h.final(&digest);
-            try Ed25519.Signature.fromBytes(sig.signature).verify(&digest, ed25519_pk);
-        } else {
-            try Ed25519.Signature.fromBytes(sig.signature).verify(file, ed25519_pk);
-        }
+
+        try Ed25519.Signature.fromBytes(sig.signature).verify(file, ed25519_pk);
+
         var global = try allocator.alloc(u8, sig.signature.len + sig.trusted_comment.len);
         defer allocator.free(global);
         mem.copyForwards(u8, global[0..sig.signature.len], sig.signature[0..]);

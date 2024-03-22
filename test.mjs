@@ -6,7 +6,7 @@ import { Minizign, Signature } from './minizign.mjs';
 const publicKey = 'RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U';
 const publicKeyInvalid = 'RWSGOq2NVecA2UPNiBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U';
 const signature = await fs.readFile('zig-linux-x86_64-0.12.0-dev.3180+83e578a18.tar.xz.minisig');
-const file = await fs.readFile('zig-linux-x86_64-0.12.0-dev.3180+83e578a18.tar.xz');
+const fileFull = await fs.readFile('zig-linux-x86_64-0.12.0-dev.3180+83e578a18.tar.xz');
 
 test('valid public key, signature, and file', async (t) => { 
   const minizign = new Minizign();
@@ -18,21 +18,14 @@ test('valid public key, signature, and file', async (t) => {
   try {
     pk = minizign.publicKey(publicKey);
     sig = minizign.signature(signature);
-    pk.verify(sig, file);
-  } catch (error) {
-    if (error.message === 'Weak Public Key') {
-      const mem = minizign.getSlice(pk.string);
-      const decoder = new TextDecoder();
-      console.log(`Weak Public Key: ${decoder.decode(mem.used)}`);
-    }
-    throw error;
+    pk.verify(sig, fileFull);
   } finally {
     pk?.deinit();
     sig?.deinit();
   }
 }); 
 
-test('invalid public key, valid signature and file', async (t) => { 
+test('invalid public key', async (t) => { 
   const minizign = new Minizign();
 
   await minizign.init();
@@ -43,7 +36,7 @@ test('invalid public key, valid signature and file', async (t) => {
   try { 
     pk = minizign.publicKey(publicKeyInvalid);
     sig = minizign.signature(signature);
-    pk.verify(sig, file); // Error thrown here
+    pk.verify(sig, fileFull); // Error thrown here
     failed = true; // If try is still executing, it is a problem
   } catch {
     // Do nothing
@@ -71,3 +64,30 @@ test('signature returns correct type', async (t) => {
   }
 }); 
 
+test('low-level prehash interface', async (t) => { 
+  const minizign = new Minizign(); 
+  await minizign.init(); 
+  
+  let pk = null;
+  let sig = null;
+  let verifier = null;
+  try {
+    pk = minizign.publicKey(publicKey);
+    sig = minizign.signature(signature);
+    verifier = pk.verifier(sig);
+
+    const fd = await fs.open('zig-linux-x86_64-0.12.0-dev.3180+83e578a18.tar.xz');
+
+    while (true) {
+      const { bytesRead, buffer } = await fd.read();
+      if (bytesRead == 0) break;
+      verifier.update(buffer.subarray(0, bytesRead));
+    }
+
+    verifier.verify(); 
+  } finally {
+    pk?.deinit();
+    sig?.deinit();
+    verifier?.deinit();
+  }
+}); 
