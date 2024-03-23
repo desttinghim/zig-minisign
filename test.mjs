@@ -38,7 +38,7 @@ test('trusted comment', async (t) => {
     sig = minizign.signature(signature)
     pk.verify(sig, fileFull)
     const trustedComment = sig.getTrustedComment()
-    assert.strictEqual(trustedComment, 'timestamp:1709927163	file:zig-linux-x86_64-0.12.0-dev.3180+83e578a18.tar.xz	hashed')
+    assert.strictEqual(trustedComment, 'timestamp:1709927163\tfile:zig-linux-x86_64-0.12.0-dev.3180+83e578a18.tar.xz\thashed')
   } finally {
     pk?.deinit()
     sig?.deinit()
@@ -75,7 +75,7 @@ test('signature returns correct type', async (t) => {
   let sig = null
   try {
     sig = minizign.signature(signature)
-    if (!sig instanceof Signature) {
+    if (!(sig instanceof Signature)) {
       throw new Error('Signature is of unknown type')
     }
   } finally {
@@ -99,7 +99,7 @@ test('Verifier', async (t) => {
 
     while (true) {
       const { bytesRead, buffer } = await fd.read()
-      if (bytesRead == 0) break
+      if (bytesRead === 0) break
       verifier.update(buffer.subarray(0, bytesRead))
     }
 

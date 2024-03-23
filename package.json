@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "esbuild minizign.mjs --bundle --outdir=dist --keep-names --platform=node --target=node20 --loader:.wasm=binary", 
-    "format": "standard --fix",
+    "format": "standard --fix minizign.mjs test.mjs",
     "test": "standard && node test"
   },
   "standard": {
