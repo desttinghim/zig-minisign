@@ -2,7 +2,7 @@
   "name": "zig-minisign",
   "version": "1.0.0",
   "description": "Zig Minisign is a javascript binding of zig-minisign to enable verify minisig signatures on node",
-  "main": "minizign.mjs",
+  "main": "dist/minizign.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/desttinghim/zig-minisign.git"
