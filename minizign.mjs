@@ -1,5 +1,9 @@
+/** @module minizign */
 import wasmModule from './minizign.wasm'
 
+/** 
+ * @throws will throw error if argument is an error code
+ */
 function checkResult (result) {
   switch (result) {
     case -1:
@@ -29,17 +33,23 @@ function checkResult (result) {
   }
 }
 
+/** Top-level class providing high-level interface */
 export class Minizign {
   constructor () {
     this.mod = WebAssembly.compile(wasmModule)
     this.instance = null
   }
 
+  /** Initializes the WebAssembly module */
   async init () {
     this.mod = await this.mod
     this.instance = await WebAssembly.instantiate(this.mod)
   }
 
+  /**
+   * @param slice - Index + Length into WASM memory
+   * @return Uint8Array referencing WASM memory
+   */
   getSlice (slice) {
     if (this.instance === null) {
       throw new Error('Minizign.init() must be called before getSlice')
@@ -57,6 +67,11 @@ export class Minizign {
     return { all: subarray, used, unused }
   }
 
+  /**
+   * Encodes a JavaScript string into the WASM memory as UTF8 
+   * @param {string} string - The string to encode
+   * @return Slice of the encoded string
+   */
   encode (string) {
     if (this.instance === null) {
       throw new Error('Minizign.init() must be called before encode')
@@ -75,6 +90,11 @@ export class Minizign {
     return { index: resultAlloc, length: written, capacity: length }
   }
 
+  /** 
+   * Copies a Uint8Array into the WASM memory 
+   * @param {Uint8Array} array - Array to copy
+   * @return Slice of the copied array
+   */
   dupe (array) {
     if (this.instance === null) {
       throw new Error('Minizign.init() must be called before dupe')
@@ -91,6 +111,10 @@ export class Minizign {
     return { index: resultAlloc, length: array.length, capacity: array.length }
   }
 
+  /** 
+   * @param {string} base64String - minisgn public key, base64 encoded 
+   * @return {PublicKey}
+   */
   publicKey (base64String) {
     if (this.instance === null) {
       throw new Error('Minizign.init() must be called before publicKey')
@@ -106,6 +130,10 @@ export class Minizign {
     return new PublicKey(this, resultFromBase64, encodedString)
   }
 
+  /** 
+   * @param {Uint8Array} sigArray - minisgn signature as array of bytes
+   * @return {Signature}
+   */
   signature (sigArray) {
     if (this.instance === null) {
       throw new Error('Minizign.init() must be called before signature')
@@ -122,6 +150,7 @@ export class Minizign {
   }
 }
 
+/** A decoded minisign signature */
 export class Signature {
   constructor (minizign, index, slice) {
     this.minizign = minizign
@@ -129,6 +158,9 @@ export class Signature {
     this.slice = slice
   }
 
+  /** 
+   * @return {string} Returns the signatures trusted comment
+   */
   getTrustedComment () {
     const instance = this.minizign.instance
     const { memory, signatureGetTrustedComment, signatureFreeTrustedComment } = instance.exports
@@ -151,7 +183,8 @@ export class Signature {
 
     return comment
   }
-
+  
+  /** Frees the WASM memory associated with object */
   deinit () {
     const instance = this.minizign.instance
     instance.exports.signatureDeinit(this.index)
@@ -159,6 +192,7 @@ export class Signature {
   }
 }
 
+/** A decoded minisign public key */
 export class PublicKey {
   constructor (minizign, index, string) {
     this.minizign = minizign
@@ -166,29 +200,10 @@ export class PublicKey {
     this.string = string
   }
 
-  verifyLegacy (signature, file) {
-    if (!(this instanceof PublicKey)) {
-      throw new Error('this must be an instance of PublicKey')
-    }
-    if (!(signature instanceof Signature)) {
-      throw new Error('signature parameter must be an instance of Signature')
-    }
-
-    const instance = this.minizign.instance
-
-    const { publicKeyVerifyLegacy } = instance.exports
-
-    const dupedFile = this.minizign.dupe(file)
-
-    const resultVerify = publicKeyVerifyLegacy(this.index, signature.index, dupedFile.index, dupedFile.length)
-    instance.exports.free(dupedFile.index, dupedFile.capacity)
-    checkResult(resultVerify)
-
-    if (resultVerify !== 1) {
-      throw new Error('Unexpected result from verifying')
-    }
-  }
-
+  /**
+   * @param {Signature} signature - A minisign signature for a file
+   * @return {Verifier} A verifier that can be incrementally updated
+   */
   verifier (signature) {
     const instance = this.minizign.instance
     const { publicKeyVerifier } = instance.exports
@@ -203,6 +218,11 @@ export class PublicKey {
     return new Verifier(this.minizign, resultVerifier)
   }
 
+  /**
+   * @param {Signature} signature - A minisign signature for file
+   * @param {Uint8Array} buffer - The signed file
+   * @throw exception when signature fails verification
+   */
   verify (signature, buffer) {
     if (!(this instanceof PublicKey)) {
       throw new Error('this must be an instance of PublicKey')
@@ -217,6 +237,7 @@ export class PublicKey {
     verifier.verify()
   }
 
+  /** Free WASM memory associated with object */
   deinit () {
     const instance = this.minizign.instance
     instance.exports.publicKeyDeinit(this.index)
@@ -224,6 +245,7 @@ export class PublicKey {
   }
 }
 
+/** Allows incrementally hashing the file to verify */
 export class Verifier {
   constructor (minizign, index) {
     this.minizign = minizign
@@ -233,6 +255,9 @@ export class Verifier {
     checkResult(this.buffer)
   }
 
+  /**
+   * @param {Uint8Array} slice - add contents of slice into hash
+   */
   update (slice) {
     if (!(slice instanceof Buffer)) {
       throw new Error('Invalid argument passed to Verifier.update')
@@ -251,6 +276,10 @@ export class Verifier {
     }
   }
 
+  /**
+   * Call after calling update for every part of the file.
+   * @throw exception when signature fails verification
+   */
   verify () {
     const { verifierVerify } = this.minizign.instance.exports
     const resultVerify = verifierVerify(this.index)
@@ -261,6 +290,7 @@ export class Verifier {
     }
   }
 
+  /** Frees WASM memory associated with object */
   deinit () {
     const instance = this.minizign.instance
     instance.exports.verifierDeinit(this.index)
