@@ -1,6 +1,6 @@
 {
   "name": "zig-minisign",
-  "version": "1.0.0",
+  "version": "0.1.3",
   "description": "Zig Minisign is a javascript binding of zig-minisign to enable verify minisig signatures on node",
   "main": "dist/minizign.js",
   "repository": {
@@ -17,7 +17,10 @@
       "dist/**/*.js"
     ]
   },
-  "author": "",
+  "contributors": [
+    "Louis Pearson <opensource at louispearson dot work>",
+    "Frank Denis <j at pureftpd dot org>"
+  ],
   "license": "ISC",
   "devDependencies": {
     "esbuild": "^0.20.0",
