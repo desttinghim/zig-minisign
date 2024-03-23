@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import test from 'node:test'
 import assert from 'node:assert'
 
-import { Minizign, Signature } from './minizign.mjs'
+import { Minizign, Signature } from './dist/minizign.js'
 
 const publicKey = 'RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U'
 const publicKeyInvalid = 'RWSGOq2NVecA2UPNiBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U'
