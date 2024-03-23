@@ -35,12 +35,6 @@ function checkResult(result) {
     case -11:
       throw new Error("Weak Public Key");
       break;
-    case -12:
-      throw new Error("Cannot Prehash");
-      break;
-    case -13:
-      throw new Error("Must Prehash");
-      break;
     default:
       // Do nothing
       break;
@@ -141,12 +135,27 @@ export class Signature {
     this.index = index;
     this.slice = slice;
   }
-  canPrehash() {
-    const instance = this.minizign.instance;
-    const result = instance.exports.signatureCanPrehash(this.index);
+  getTrustedComment() {
+    const instance = this.minizign.instance; 
+    const { memory, signatureGetTrustedComment, signatureFreeTrustedComment } = instance.exports;
+
+    const result = signatureGetTrustedComment(this.index);
     checkResult(result);
 
-    return result === 1;
+    const memoryView = new Uint8Array(memory.buffer); 
+    const dataview = new DataView(memory.buffer);
+
+    const littleEndian = true;
+    const index = dataview.getUint32(result, littleEndian);
+    const length = dataview.getUint32(result + 4, littleEndian);
+ 
+    // DECODE
+    const decoder = new TextDecoder();
+    const comment = decoder.decode(memoryView.subarray(index, index + length));
+
+    signatureFreeTrustedComment(result);
+
+    return comment;
   }
   deinit() {
     const instance = this.minizign.instance;
@@ -185,18 +194,18 @@ export class PublicKey {
   }
   verifier(signature) {
     const instance = this.minizign.instance; 
-    const { publicKeyGetVerifier } = instance.exports
+    const { publicKeyVerifier } = instance.exports
 
     if (!(signature instanceof Signature)) {
       throw new Error('signature parameter must be an instance of Signature');
     }
 
-    const resultGetVerifier = publicKeyGetVerifier(this.index, signature.index);
-    checkResult(resultGetVerifier);
+    const resultVerifier = publicKeyVerifier(this.index, signature.index);
+    checkResult(resultVerifier);
 
-    return new Verifier(this.minizign, resultGetVerifier);
+    return new Verifier(this.minizign, resultVerifier);
   }
-  verifyLegacy(signature, file) {   
+  verify(signature, buffer) {
     if (!(this instanceof PublicKey)) {
       throw new Error('this must be an instance of PublicKey');
     }
@@ -204,19 +213,12 @@ export class PublicKey {
       throw new Error('signature parameter must be an instance of Signature');
     }
 
-    const instance = this.minizign.instance;
+    const verifier = this.verifier(signature);
+ 
+    const dupedBuffer = this.minizign.dupe(buffer);
 
-    const { publicKeyVerifyLegacy } = instance.exports
-
-    const dupedFile = this.minizign.dupe(file);
-
-    const resultVerify = publicKeyVerifyLegacy(this.index, signature.index, dupedFile.index, dupedFile.length);
-    instance.exports.free(dupedFile.index, dupedFile.capacity);
-    checkResult(resultVerify);  
-
-    if (resultVerify !== 1) {
-      throw new Error('Unexpected result from verifying');
-    }
+    verifier.update(buffer); 
+    verifier.verify(); 
   }
   deinit() {
     const instance = this.minizign.instance;

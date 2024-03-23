@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
-import test from 'node:test'
+import test from 'node:test';
+import assert from 'node:assert';
 
 import { Minizign, Signature } from './minizign.mjs';
 
@@ -8,7 +9,7 @@ const publicKeyInvalid = 'RWSGOq2NVecA2UPNiBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb
 const signature = await fs.readFile('zig-linux-x86_64-0.12.0-dev.3180+83e578a18.tar.xz.minisig');
 const fileFull = await fs.readFile('zig-linux-x86_64-0.12.0-dev.3180+83e578a18.tar.xz');
 
-test('valid public key, signature, and file', async (t) => { 
+test('PublicKey.verify', async (t) => { 
   const minizign = new Minizign();
 
   await minizign.init();
@@ -24,6 +25,26 @@ test('valid public key, signature, and file', async (t) => {
     sig?.deinit();
   }
 }); 
+
+test('trusted comment', async (t) => { 
+  const minizign = new Minizign();
+
+  await minizign.init();
+  
+  let pk = null;
+  let sig = null;
+  try {
+    pk = minizign.publicKey(publicKey);
+    sig = minizign.signature(signature);
+    pk.verify(sig, fileFull);
+    const trustedComment = sig.getTrustedComment();
+    assert.strictEqual(trustedComment, 'timestamp:1709927163	file:zig-linux-x86_64-0.12.0-dev.3180+83e578a18.tar.xz	hashed');
+  } finally {
+    pk?.deinit();
+    sig?.deinit();
+  }
+}); 
+
 
 test('invalid public key', async (t) => { 
   const minizign = new Minizign();
@@ -64,7 +85,7 @@ test('signature returns correct type', async (t) => {
   }
 }); 
 
-test('low-level prehash interface', async (t) => { 
+test('Verifier', async (t) => { 
   const minizign = new Minizign(); 
   await minizign.init(); 
   
@@ -91,3 +112,4 @@ test('low-level prehash interface', async (t) => {
     verifier?.deinit();
   }
 }); 
+

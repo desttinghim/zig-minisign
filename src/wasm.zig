@@ -2,6 +2,7 @@ const std = @import("std");
 const lib = @import("lib.zig");
 const PublicKey = lib.PublicKey;
 const Signature = lib.Signature;
+const Verifier = lib.Verifier;
 
 const alloc = std.heap.wasm_allocator;
 
@@ -17,8 +18,6 @@ pub const Result = enum(isize) {
     NonCanonical = -9,
     IdentityElement = -10,
     WeakPublicKey = -11,
-    CannotPrehash = -12,
-    MustPrehash = -13,
     _,
 
     comptime {
@@ -76,11 +75,17 @@ export fn signatureDecode(str: [*]const u8, len: u32) Result {
     return Result.fromPointer(sig);
 }
 
-export fn signatureCanPrehash(sig: *Signature) Result {
-    const can_prehash = sig.canPrehash() catch |e| switch (e) {
-        error.UnsupportedAlgorithm => return .UnsupportedAlgorithm,
+export fn signatureGetTrustedComment(sig: *const Signature) Result {
+    const slice = alloc.alloc(u32, 2) catch |e| switch (e) {
+        error.OutOfMemory => return .OutOfMemory,
     };
-    return @enumFromInt(@intFromBool(can_prehash));
+    slice[0] = @intFromPtr(sig.trusted_comment.ptr);
+    slice[1] = sig.trusted_comment.len;
+    return Result.fromPointer(slice.ptr);
+}
+
+export fn signatureFreeTrustedComment(slice: *[2]u32) void {
+    alloc.free(slice);
 }
 
 /// De-initializes a signature object
@@ -117,52 +122,33 @@ export fn publicKeyDeinit(pk: *PublicKey) void {
     alloc.destroy(pk);
 }
 
-/// Verifies the integrity of a file with a public key and signature.
-/// Returns 1 on success, and a Result error code on failure.
-export fn publicKeyVerifyLegacy(
-    pk: *const PublicKey,
-    sig: *const Signature,
-    file: [*]const u8,
-    file_len: u32,
-) Result {
-    pk.verifyLegacy(alloc, file[0..file_len], sig.*) catch |e| switch (e) {
-        error.MustPrehash => return .MustPrehash,
-        error.OutOfMemory => return .OutOfMemory,
-        error.InvalidEncoding => return .InvalidEncoding,
-        error.KeyIdMismatch => return .KeyIdMismatch,
-        error.SignatureVerificationFailed => return .SignatureVerificationFailed,
-        error.NonCanonical => return .NonCanonical,
-        error.IdentityElement => return .IdentityElement,
-        error.WeakPublicKey => return .WeakPublicKey,
-    };
-
-    return @enumFromInt(1);
-}
-
-export fn publicKeyGetVerifier(pk: *const PublicKey, sig: *const Signature) Result {
+export fn publicKeyVerifier(pk: *const PublicKey, sig: *const Signature) Result {
     const verifier = struct {
-        fn impl(pk_: *const PublicKey, sig_: *const Signature) !*PublicKey.Verifier {
-            const verifier: *PublicKey.Verifier = try alloc.create(PublicKey.Verifier);
+        fn impl(pk_: *const PublicKey, sig_: *const Signature) !*Verifier {
+            const verifier: *Verifier = try alloc.create(Verifier);
             errdefer alloc.destroy(verifier);
 
-            verifier.* = try pk_.getVerifier(sig_);
+            verifier.* = try pk_.verifier(sig_);
 
             return verifier;
         }
     }.impl(pk, sig) catch |e| switch (e) {
-        error.CannotPrehash => return .CannotPrehash,
-        error.KeyIdMismatch => return .KeyIdMismatch,
         error.OutOfMemory => return .OutOfMemory,
+        error.InvalidEncoding => return .InvalidEncoding,
+        error.KeyIdMismatch => return .KeyIdMismatch,
+        error.UnsupportedAlgorithm => return .UnsupportedAlgorithm,
+        error.NonCanonical => return .NonCanonical,
+        error.IdentityElement => return .IdentityElement,
     };
 
     return Result.fromPointer(verifier);
 }
 
-export fn verifierUpdate(verifier: *PublicKey.Verifier, bytes: [*]const u8, length: u32) void {
+export fn verifierUpdate(verifier: *Verifier, bytes: [*]const u8, length: u32) void {
     verifier.update(bytes[0..length]);
 }
 
-export fn verifierVerify(verifier: *PublicKey.Verifier) Result {
+export fn verifierVerify(verifier: *Verifier) Result {
     verifier.verify(alloc) catch |e| switch (e) {
         error.OutOfMemory => return .OutOfMemory,
         error.InvalidEncoding => return .InvalidEncoding,
@@ -174,6 +160,6 @@ export fn verifierVerify(verifier: *PublicKey.Verifier) Result {
     return @enumFromInt(1);
 }
 
-export fn verifierDeinit(verifier: *PublicKey.Verifier) void {
+export fn verifierDeinit(verifier: *Verifier) void {
     alloc.destroy(verifier);
 }
