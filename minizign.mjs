@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+import wasmModule from './minizign.wasm';
 
 function checkResult(result) {
   switch (result) {
@@ -43,8 +43,7 @@ function checkResult(result) {
 
 export class Minizign {
   constructor() {
-    this.asm = fs.readFileSync('./minizign.wasm');
-    this.mod = WebAssembly.compile(this.asm);
+    this.mod = WebAssembly.compile(wasmModule);
     this.instance = null;
   } 
   async init() {

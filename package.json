@@ -1,11 +1,26 @@
 {
-  "name": "minizign",
+  "name": "zig-minisign",
   "version": "1.0.0",
-  "description": "Minisign API for JS using Zig minisign WebAssembly module",
+  "description": "Zig Minisign is a javascript binding of zig-minisign to enable verify minisig signatures on node",
   "main": "minizign.mjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/desttinghim/zig-minisign.git"
+  },
   "scripts": {
-    "test": "node test.mjs"
+    "build": "esbuild minizign.mjs --bundle --outdir=dist --keep-names --platform=node --target=node20 --loader:.wasm=binary", 
+    "format": "standard --fix",
+    "test": "standard && node test"
+  },
+  "standard": {
+    "ignore": [
+      "dist/**/*.js"
+    ]
   },
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "esbuild": "^0.20.0",
+    "standard": "^17.0.0"
+  }
 }
