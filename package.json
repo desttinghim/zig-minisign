@@ -5,10 +5,10 @@
   "main": "dist/minizign.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/desttinghim/zig-minisign.git"
+    "url": "git+https://github.com/desttinghim/zig-minisign.git"
   },
   "scripts": {
-    "build": "esbuild minizign.mjs --bundle --outdir=dist --keep-names --platform=node --target=node20 --loader:.wasm=binary", 
+    "build": "esbuild minizign.mjs --bundle --outdir=dist --keep-names --platform=node --target=node20 --loader:.wasm=binary",
     "format": "standard --fix minizign.mjs test.mjs",
     "test": "standard && node test.mjs"
   },
